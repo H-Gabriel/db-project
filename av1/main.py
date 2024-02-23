@@ -1,15 +1,24 @@
 import math
-from abstractions import Table, Bucket, BucketRef, bucket_size
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from abstractions import Table, Bucket, BucketRef, max_bucket_size
+
+app = Flask(__name__)
+CORS(app)
+load = open('words.txt', 'r')
+load_size = len(load.readlines())
+buckets = None
+table = None
 
 colisions = 0
 overflows = 0
+buckets_amount = 0
 
-with open('words.txt', 'r') as load:
-    load_size = len(load.readlines())
-    buckets_amount = math.ceil(load_size/bucket_size)
+def init_buckets():
+    global buckets, buckets_amount
+    load.seek(0)
+    buckets_amount = math.ceil(load_size/max_bucket_size)
     buckets = [Bucket() for _ in range(buckets_amount)]
-    table = Table(load_size, int(input("Quantidade de registros por página: ")))
-    table.load_pages(load)
 
 def hash_string(s):
     hash = 0
@@ -17,40 +26,65 @@ def hash_string(s):
         hash = (31 * hash + byte) % buckets_amount
     return hash
 
-for p in range(table.pages_amount):
-    for line in table.pages[p]:
-        i = hash_string(line)
-        if len(buckets[i].refs) < bucket_size:
-            buckets[i].refs.append(BucketRef(line, p))
-        else:
-            colisions += 1
+@app.route('/config', methods=['POST'])
+def config():
+    global table
 
-            temp = buckets[i]
-            while temp.overflow_ref != None:
-                temp = temp.overflow_ref
-            
-            if len(temp.refs) < bucket_size:
-                temp.refs.append(BucketRef(line, p))
+    data = request.get_json()
+    table = Table(load_size, data['records_page'])
+    table.load_pages(load)
+
+    return jsonify({'message': 'Configuration successful'})
+
+@app.route('/fill-buckets', methods=['POST'])
+def fill_buckets():
+    global colisions, overflows
+
+    for page_index, page in enumerate(table.pages):
+        for line in page:
+            i = hash_string(line)
+
+            if len(buckets[i].refs) < max_bucket_size:
+                buckets[i].refs.append(BucketRef(line, page_index))
             else:
-                overflows += 1
-                temp.overflow_ref = Bucket()
-                temp.overflow_ref.refs.append(BucketRef(line, p))
+                colisions += 1
 
-print("Quantidade de colisões:", colisions)
-print("Quantidade de overflows:", overflows)
+                temp = buckets[i]
+                while temp.overflow_ref is not None:
+                    temp = temp.overflow_ref
+                
+                if len(temp.refs) < max_bucket_size:
+                    temp.refs.append(BucketRef(line, page_index))
+                else:
+                    overflows += 1
+                    temp.overflow_ref = Bucket()
+                    temp.overflow_ref.refs.append(BucketRef(line, page_index))
+                
+    response_data = {
+        'message': 'Buckets preenchidos com sucesso',
+        'colisions': colisions,
+        'overflows': overflows
+    }
+    
+    return jsonify(response_data), 200
 
-# Funcionalidade de busca
-search = input("Pesquise uma palavra: ")
-bucket_index = hash_string(search)
-search_bucket = buckets[bucket_index]
+@app.route('/search', methods=['GET'])
+def search():
+    global table, colisions, overflows
+    
+    search = request.args.get('key')
+    bucket_index = hash_string(search)
+    search_bucket = buckets[bucket_index]
 
-found = False
-while search_bucket != None:
-    for ref in search_bucket.refs:
-        if ref.line == search:
-            print("A palavra se encontra na página", ref.page + 1)
-            found = True
-            break
-    if found:
-        break
-    search_bucket = search_bucket.overflow_ref
+    found = False
+    while search_bucket is not None:
+        for ref in search_bucket.refs:
+            if ref.line == search:
+                return jsonify({'result': f'A palavra se encontra na página {ref.page + 1}'})
+        search_bucket = search_bucket.overflow_ref
+
+    return jsonify({'result': 'A palavra não foi encontrada.'})
+
+if __name__ == '__main__':
+    init_buckets()
+    app.run()

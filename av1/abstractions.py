@@ -1,6 +1,6 @@
 import math
 
-bucket_size = 4
+max_bucket_size = 4
 
 class Table:
     def __init__(self, load_size, max_page_size) -> None:
