@@ -9,14 +9,10 @@ load = open('words.txt', 'r')
 load_size = len(load.readlines())
 buckets = None
 table = None
-
-colisions = 0
-overflows = 0
 buckets_amount = 0
 
 def init_buckets():
     global buckets, buckets_amount
-    load.seek(0)
     buckets_amount = math.ceil(load_size/max_bucket_size)
     buckets = [Bucket() for _ in range(buckets_amount)]
 
@@ -34,11 +30,13 @@ def config():
     table = Table(load_size, data['records_page'])
     table.load_pages(load)
 
-    return jsonify({'message': 'Configuration successful'})
+    return jsonify({'message': 'Configurado com sucesso'})
 
 @app.route('/fill-buckets', methods=['POST'])
 def fill_buckets():
-    global colisions, overflows
+    colisions = 0
+    overflows = 0
+    init_buckets()
 
     for page_index, page in enumerate(table.pages):
         for line in page:
@@ -70,13 +68,10 @@ def fill_buckets():
 
 @app.route('/search', methods=['GET'])
 def search():
-    global table, colisions, overflows
-    
     search = request.args.get('key')
     bucket_index = hash_string(search)
     search_bucket = buckets[bucket_index]
 
-    found = False
     while search_bucket is not None:
         for ref in search_bucket.refs:
             if ref.line == search:
@@ -86,5 +81,4 @@ def search():
     return jsonify({'result': 'A palavra não foi encontrada.'})
 
 if __name__ == '__main__':
-    init_buckets()
     app.run()
