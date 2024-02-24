@@ -80,5 +80,21 @@ def search():
 
     return jsonify({'result': 'A palavra não foi encontrada.'})
 
+@app.route('/table-scan', methods=['GET'])
+def table_scan():
+    table_scan = []
+    amount = int(request.args.get('amount'))
+
+    for page in table.pages:
+        for line in page:
+            table_scan.append(line)
+            amount -= 1
+            if amount == 0:
+                break
+        if amount == 0:
+            break
+
+    return jsonify({"result": table_scan})
+
 if __name__ == '__main__':
     app.run()
