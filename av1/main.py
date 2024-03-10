@@ -60,8 +60,8 @@ def fill_buckets():
                 
     response_data = {
         'message': 'Buckets preenchidos com sucesso',
-        'colisions': colisions,
-        'overflows': overflows
+        'colisions': '{:.2f}'.format(colisions/load_size),
+        'overflows': '{:.2f}'.format(overflows/buckets_amount)
     }
     
     return jsonify(response_data), 200
@@ -75,7 +75,11 @@ def search():
     while search_bucket is not None:
         for ref in search_bucket.refs:
             if ref.line == search:
-                return jsonify({'result': f'A palavra se encontra na página {ref.page + 1}'})
+                response_data = {
+                    'result': f'A palavra se encontra na página {ref.page + 1}',
+                    'access': 1,
+                }
+                return jsonify(response_data)
         search_bucket = search_bucket.overflow_ref
 
     return jsonify({'result': 'A palavra não foi encontrada.'})
@@ -84,8 +88,13 @@ def search():
 def table_scan():
     table_scan = []
     amount = int(request.args.get('amount'))
+    disk_access = 0
+
+    if amount == 0:
+        return jsonify({'result': table_scan, 'access': disk_access})
 
     for page in table.pages:
+        disk_access += 1
         for line in page:
             table_scan.append(line)
             amount -= 1
@@ -93,8 +102,8 @@ def table_scan():
                 break
         if amount == 0:
             break
-
-    return jsonify({"result": table_scan})
+    
+    return jsonify({'result': table_scan, 'access': disk_access})
 
 if __name__ == '__main__':
     app.run()
